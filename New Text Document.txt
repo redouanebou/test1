@@ -1,0 +1,15 @@
+postgresql://postgres:IfBEKvLYTwpTlNfcjMFmJUBsmKHlRJXM@trolley.proxy.rlwy.net:54009/railway
+
+
+postgres://username:password@host:port/database
+Copy that entire string, or note down the following:
+
+Host   trolley.proxy.rlwy.net
+
+Port    54009
+
+Database     railway
+ 
+Username    postgres
+
+Password     IfBEKvLYTwpTlNfcjMFmJUBsmKHlRJXM
