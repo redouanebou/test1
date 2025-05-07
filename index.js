@@ -3,20 +3,23 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { Pool } = require('pg');
 
+// Initialize dotenv (if using .env variables)
+require('dotenv').config();
+
 const app = express();
 app.use(express.json());
 
-// Hardcode PostgreSQL connection
+// Set up PostgreSQL connection
 const pool = new Pool({
-  connectionString: 'postgresql://postgres:IfBEKvLYTwpTlNfcjMFmJUBsmKHlRJXM@trolley.proxy.rlwy.net:54009/railway', // Replace with your actual PostgreSQL connection string
+  connectionString: process.env.DATABASE_URL, // Replace with your connection string from Railway
   ssl: {
     rejectUnauthorized: false,
   },
 });
 
-// Hardcode environment variables
-const jwtSecret = 'Redouane*_boundra*_19031965'; // Replace with your JWT secret key
-const port = process.env.PORT || 3000; // Default to port 3000 if not set
+// Define environment variables
+const jwtSecret = process.env.JWT_SECRET || 'Redouane*_boundra*_19031965'; // Default secret if not provided
+const port = process.env.PORT || 3000; // Default to port 3000 if not provided
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -102,4 +105,17 @@ function authenticateToken(req, res, next) {
   }
 
   // Verify the token
-  jwt
+  jwt.verify(token, jwtSecret, (err, decoded) => {
+    if (err) {
+      return res.status(403).json({ message: 'Invalid or expired token' });
+    }
+    // Attach user ID to request object
+    req.userId = decoded.userId;
+    next();
+  });
+}
+
+// Start the server
+app.listen(port, () => {
+  console.log(`Server is running on port ${port}`);
+});
