@@ -1,10 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const dotenv = require('dotenv');
 const { Pool } = require('pg');
-
-dotenv.config();
 
 const app = express();
 app.use(express.json());
@@ -15,10 +12,11 @@ const pool = new Pool({
     rejectUnauthorized: false,
   },
 });
-const databaseUrl = process.env.DATABASE_URL;
+
 const jwtSecret = process.env.JWT_SECRET;
-const port = process.env.PORT || 3000;
-console.log(`Database URL: ${databaseUrl}`);
+const port = process.env.PORT || 3000;  // This is the only declaration of `port`
+
+console.log(`Database URL: ${process.env.DATABASE_URL}`);
 console.log(`JWT Secret: ${jwtSecret}`);
 console.log(`App running on port: ${port}`);
 
@@ -62,7 +60,6 @@ app.post('/login', async (req, res) => {
     }
 
     const user = result.rows[0];
-
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
@@ -98,7 +95,6 @@ function authenticateToken(req, res, next) {
   });
 }
 
-const port = process.env.PORT || 3000;
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
