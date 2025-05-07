@@ -1,8 +1,8 @@
 {
   "dependencies": {
-    "express": "^your_version",
-    "bcryptjs": "^your_version",
-    "jsonwebtoken": "^your_version",
-    "pg": "^your_version"
+    "express": "^4.17.1",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^8.5.1",
+    "pg": "^8.7.1"
   }
 }
