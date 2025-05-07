@@ -92,6 +92,10 @@ app.get('/protected', jwtMiddleware, (req, res) => {
   res.json({ message: 'You are authorized to view this content' });
 });
 
+app.get("/", (req, res) => {
+  res.send("Server is working! Welcome to the homepage.");
+});
+
 
 const port = 3000;
 app.listen(port, () => {
