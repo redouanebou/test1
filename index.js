@@ -15,6 +15,12 @@ const pool = new Pool({
     rejectUnauthorized: false,
   },
 });
+const databaseUrl = process.env.DATABASE_URL;
+const jwtSecret = process.env.JWT_SECRET;
+const port = process.env.PORT || 3000;
+console.log(`Database URL: ${databaseUrl}`);
+console.log(`JWT Secret: ${jwtSecret}`);
+console.log(`App running on port: ${port}`);
 
 app.get('/', (req, res) => {
   res.send('Hello, welcome to the private user site!');
