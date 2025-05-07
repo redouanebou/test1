@@ -1,78 +1,91 @@
-const express = require("express");
-const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
-const { Pool } = require("pg");
+const express = require('express');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const { Client } = require('pg');
+require('dotenv').config();
 
 const app = express();
+
 app.use(express.json());
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+const client = new Client({
+    connectionString: process.env.DATABASE_URL,
+    ssl: {
+        rejectUnauthorized: false,
+    },
 });
 
-const JWT_SECRET = process.env.JWT_SECRET;
+client.connect()
+    .then(() => console.log('Connected to PostgreSQL'))
+    .catch(err => console.error('Failed to connect to the database', err));
 
-app.get("/", (req, res) => {
-  res.send("Server is working! Welcome to the homepage.");
-});
+const authenticateJWT = (req, res, next) => {
+    const token = req.header('Authorization') && req.header('Authorization').split(' ')[1];
 
-app.post("/register", async (req, res) => {
-  const { email, password } = req.body;
-  const hashedPassword = await bcrypt.hash(password, 10);
-  try {
-    const result = await pool.query("INSERT INTO users (email, password) VALUES ($1, $2) RETURNING id", [email, hashedPassword]);
-    const userId = result.rows[0].id;
-    res.status(201).json({ message: "User registered", userId });
-  } catch (err) {
-    res.status(500).json({ error: "Registration failed", details: err.message });
-  }
-});
-
-app.post("/login", async (req, res) => {
-  const { email, password } = req.body;
-  try {
-    const result = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
-    const user = result.rows[0];
-
-    if (!user || !(await bcrypt.compare(password, user.password))) {
-      return res.status(401).json({ error: "Invalid credentials" });
+    if (!token) {
+        return res.status(403).send('Access denied');
     }
 
-    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: "1h" });
-    res.json({ token });
-  } catch (err) {
-    res.status(500).json({ error: "Login failed", details: err.message });
-  }
-});
-
-const authenticate = (req, res, next) => {
-  const token = req.header("Authorization")?.replace("Bearer ", "");
-  if (!token) {
-    return res.status(403).json({ error: "Access denied, no token provided." });
-  }
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.userId = decoded.userId;
-    next();
-  } catch (err) {
-    res.status(401).json({ error: "Invalid token" });
-  }
+    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+        if (err) {
+            return res.status(403).send('Invalid token');
+        }
+        req.user = user;
+        next();
+    });
 };
 
-app.get("/content", authenticate, async (req, res) => {
-  try {
-    const result = await pool.query("SELECT content FROM user_content WHERE user_id = $1", [req.userId]);
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "No content found for this user" });
+app.post('/register', async (req, res) => {
+    const { username, email, password } = req.body;
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const query = 'INSERT INTO users (username, email, password) VALUES ($1, $2, $3) RETURNING id';
+    const values = [username, email, hashedPassword];
+
+    try {
+        const result = await client.query(query, values);
+        res.status(201).send({ userId: result.rows[0].id });
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Error creating user');
     }
-    res.json({ content: result.rows[0].content });
-  } catch (err) {
-    res.status(500).json({ error: "Failed to fetch content", details: err.message });
-  }
 });
 
-const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+app.post('/login', async (req, res) => {
+    const { email, password } = req.body;
+
+    const query = 'SELECT * FROM users WHERE email = $1';
+    try {
+        const result = await client.query(query, [email]);
+
+        if (result.rows.length === 0) {
+            return res.status(400).send('User not found');
+        }
+
+        const user = result.rows[0];
+
+        const validPassword = await bcrypt.compare(password, user.password);
+        if (!validPassword) {
+            return res.status(400).send('Invalid password');
+        }
+
+        const token = jwt.sign({ userId: user.id, username: user.username }, process.env.JWT_SECRET, {
+            expiresIn: '1h', 
+        });
+
+        res.status(200).send({ token });
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Error logging in');
+    }
+});
+
+app.get('/profile', authenticateJWT, (req, res) => {
+    res.status(200).send(`Welcome, ${req.user.username}!`);
+});
+
+const port = process.env.PORT || 8080;
+app.listen(port, () => {
+    console.log(`Server running on port ${port}`);
 });
