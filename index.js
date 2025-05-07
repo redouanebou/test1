@@ -1,91 +1,98 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { Client } = require('pg');
-require('dotenv').config();
+const dotenv = require('dotenv');
+const { Pool } = require('pg');
+
+dotenv.config();
 
 const app = express();
-
 app.use(express.json());
 
-const client = new Client({
-    connectionString: process.env.DATABASE_URL,
-    ssl: {
-        rejectUnauthorized: false,
-    },
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false,
+  },
 });
 
-client.connect()
-    .then(() => console.log('Connected to PostgreSQL'))
-    .catch(err => console.error('Failed to connect to the database', err));
-
-const authenticateJWT = (req, res, next) => {
-    const token = req.header('Authorization') && req.header('Authorization').split(' ')[1];
-
-    if (!token) {
-        return res.status(403).send('Access denied');
-    }
-
-    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-        if (err) {
-            return res.status(403).send('Invalid token');
-        }
-        req.user = user;
-        next();
-    });
-};
+app.get('/', (req, res) => {
+  res.send('Hello, welcome to the private user site!');
+});
 
 app.post('/register', async (req, res) => {
-    const { username, email, password } = req.body;
+  const { email, password } = req.body;
 
+  if (!email || !password) {
+    return res.status(400).json({ message: 'Email and password are required' });
+  }
+
+  try {
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const query = 'INSERT INTO users (username, email, password) VALUES ($1, $2, $3) RETURNING id';
-    const values = [username, email, hashedPassword];
+    const query = 'INSERT INTO users (email, password) VALUES ($1, $2)';
+    await pool.query(query, [email, hashedPassword]);
 
-    try {
-        const result = await client.query(query, values);
-        res.status(201).send({ userId: result.rows[0].id });
-    } catch (err) {
-        console.error(err);
-        res.status(500).send('Error creating user');
-    }
+    res.status(201).json({ message: 'User registered successfully' });
+  } catch (error) {
+    console.error('Error registering user:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
 });
 
 app.post('/login', async (req, res) => {
-    const { email, password } = req.body;
+  const { email, password } = req.body;
 
+  if (!email || !password) {
+    return res.status(400).json({ message: 'Email and password are required' });
+  }
+
+  try {
     const query = 'SELECT * FROM users WHERE email = $1';
-    try {
-        const result = await client.query(query, [email]);
+    const result = await pool.query(query, [email]);
 
-        if (result.rows.length === 0) {
-            return res.status(400).send('User not found');
-        }
-
-        const user = result.rows[0];
-
-        const validPassword = await bcrypt.compare(password, user.password);
-        if (!validPassword) {
-            return res.status(400).send('Invalid password');
-        }
-
-        const token = jwt.sign({ userId: user.id, username: user.username }, process.env.JWT_SECRET, {
-            expiresIn: '1h', 
-        });
-
-        res.status(200).send({ token });
-    } catch (err) {
-        console.error(err);
-        res.status(500).send('Error logging in');
+    if (result.rows.length === 0) {
+      return res.status(401).json({ message: 'Invalid email or password' });
     }
+
+    const user = result.rows[0];
+
+    const isMatch = await bcrypt.compare(password, user.password);
+
+    if (!isMatch) {
+      return res.status(401).json({ message: 'Invalid email or password' });
+    }
+
+    const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '1h' });
+
+    res.json({ message: 'Login successful', token });
+  } catch (error) {
+    console.error('Error logging in user:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
 });
 
-app.get('/profile', authenticateJWT, (req, res) => {
-    res.status(200).send(`Welcome, ${req.user.username}!`);
+app.get('/protected', authenticateToken, (req, res) => {
+  res.json({ message: 'This is protected content', userId: req.userId });
 });
 
-const port = process.env.PORT || 8080;
+function authenticateToken(req, res, next) {
+  const token = req.header('Authorization') && req.header('Authorization').split(' ')[1];
+
+  if (!token) {
+    return res.status(403).json({ message: 'Access denied' });
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+    if (err) {
+      return res.status(403).json({ message: 'Invalid or expired token' });
+    }
+    req.userId = decoded.userId;
+    next();
+  });
+}
+
+const port = process.env.PORT || 3000;
 app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
+  console.log(`Server is running on port ${port}`);
 });
